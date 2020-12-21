@@ -2,7 +2,8 @@ from tkinter import *
 
 
 class Basic3EntryPopup(Toplevel):
-    def __init__(self, master=None, title="Enter", ltext1="", ltext2="", ltext3="", btext="Tamam", command=None, cnf=None,
+    def __init__(self, master=None, title="Enter", ltext1="", ltext2="", ltext3="",
+                 btext="Tamam", command=None, cnf=None,
                  **kw):
         if cnf is None:
             cnf = {}
@@ -32,13 +33,18 @@ class Basic3EntryPopup(Toplevel):
         label2.grid(column=0, row=1)
         label3.grid(column=0, row=2)
 
-    def command(self, *args):
+    def command(self, _):
         print("You pressed the button and nothing happened", self.Entry1.get(), self.Entry2.get(), self.Entry3.get())
 
 
+class BasicDropmenu(Toplevel):
+
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf is None:
+            cnf = {}
+        super().__init__(master, cnf, **kw)
+
+
+
 if __name__ == '__main__':
-    a = Tk()
-
-    b = Basic3EntryPopup(a, "Adı", "Soyadı", "Eşek adı", "Kaydet")
-
-    a.mainloop()
+    pass

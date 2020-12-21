@@ -10,10 +10,11 @@ from pearowseasytools import daemon_and_start
 
 
 class Game:
-    def __init__(self, name, size, path="", image_path: str = None, date=datetime.now()):
+    def __init__(self, name, size, no, path="", image_path: str = None, date=datetime.now()):
         self.name = name
         self.size = size
         self.path = path
+        self.no = no
         self.expdate = date
         self.compressed = False
         if image_path is not None:
@@ -157,7 +158,7 @@ class Gamebox(Frame):
 
 class ListObj(Frame):
 
-    def __init__(self, master=None, text: str = "", games: list = None, menu=True, cnf=None, **kw):
+    def __init__(self, master, text: str = "", games: list = None, row: int = None, menu=True, cnf=None, **kw):
         if games is None:
             games = []
         if cnf is None:
@@ -167,7 +168,9 @@ class ListObj(Frame):
         self.games = games
         self.selected = False
         self.renamemode = False
+        self.old_name = text
         self.menu = menu
+        self.row = row
 
         self.text = Label(self, text=text, height=2, width=30, bg="#001c00", fg="white")
         self.text.pack(side=LEFT)
@@ -176,20 +179,15 @@ class ListObj(Frame):
             self.rightmenu = DropMenu(self)
             self.rightmenu.add_command(label="Yeniden Adlandır", command=self.rename)
             self.rightmenu.add_command(label="Sil", command=self.delete)
+        if self.menu:
+            self.save()
 
         self.bind("<Enter>", self.on_enter)
         self.bind("<Leave>", self.on_leave)
 
     def add(self, game):
-        print("_"*40)
-        for game in self.games:
-            print(game.name)
-        print("_" * 40)
         self.games.append(game)
-        print("_" * 40)
-        for game in self.games:
-            print(game.name)
-        print("_" * 40)
+        self.save()
 
     def on_enter(self, _):
         self.selected = True
@@ -234,6 +232,7 @@ class ListObj(Frame):
 
         elif event.keysym == "Return":
             self.text.unbind("<Key>")
+            self.save()
             self.renamemode = False
             return
 
@@ -246,7 +245,29 @@ class ListObj(Frame):
         else:
             self.text["text"] += event.char
 
+    def save(self):
+        if not os.path.exists("Data/data.ls"):
+            open("Data/data.ls", "w", encoding="utf-8")
+        games = []
+        for game in self.games:
+            games.append(game.no)
+        if self.row is None:
+            with open("Data/data.ls", "r+") as file:
+                self.row = len(file.read().split("\n")) - 1
+                file.write(f"{self.text['text']}{games}\n")
+        else:
+            data = open("Data/data.ls", "r").read().splitlines()
+            with open("Data/data.ls", "w", encoding="utf-8") as file:
+                data[self.row] = f"{self.text['text']}{games}"
+                file.write("\n".join(data) + "\n")
+
     def delete(self):
+        data = open("Data/data.ls", "r").read().splitlines()
+        with open("Data/data.ls", "w", encoding="utf-8") as file:
+            print(data, self.row)
+            del data[self.row]
+            if len(data) > 0:
+                file.write("\n".join(data) + "\n")
         self.master.master.remove_list(self)
 
 
@@ -255,7 +276,8 @@ class AddList(ListObj):
     def __init__(self, master=None, cnf=None, **kw):
         if cnf is None:
             cnf = {}
-        super().__init__(master, "+ Liste Ekle", cnf, **kw, menu=False)
+        super().__init__(master, "+ Liste Ekle", cnf, **kw, row=-1, menu=False)
+        self.listbox = master
 
     def on_release(self, _):
         if self.selected:
@@ -263,16 +285,22 @@ class AddList(ListObj):
             self.add_list()
 
     def add_list(self):
-        self.master.master.add_list(ListObj(self.master.master, "Yeni Liste"), True)
+        self.listbox.add_list(ListObj(self.listbox, text="Yeni Liste"), True)
 
 
 class Listbox(ScrollableFrame):
 
-    def __init__(self, master=None, cnf=None, **kw):
+    def __init__(self, master=None, games=None, cnf=None, **kw):
         super().__init__(master, cnf, **kw, width=200, height=700, bg="#001500")
-        self.lists = []
+        if games is None:
+            games = []
+        self.mainlist = ListObj(self, "Tümü", games, -1, False)
+        self.lists = [self.mainlist]
         self.selection = None
         self.add_butt = AddList(self)
+
+        self.scan_file()
+        self.select(self.mainlist)
 
     def add_list(self, liste: ListObj, select=False):
         self.lists.append(liste)
@@ -280,8 +308,32 @@ class Listbox(ScrollableFrame):
         if select:
             self.select(liste)
 
+    def scan_file(self):
+        if not os.path.exists("Data/data.ls"):
+            open("Data/data.ls", "w", encoding="utf-8")
+
+        with open("Data/data.ls", "r") as lists:
+            i = 0
+            for prop in lists.read().split("\n"):
+                name = prop[:prop.find("[")]
+                games = []
+                if prop == "":
+                    self.show_lists()
+                    return
+                for listgame in prop[prop.find("[") + 1:prop.find("]")].split(","):
+                    if listgame == "":
+                        continue
+                    for game in self.mainlist.games:
+                        if int(listgame.strip()) == game.no:
+                            games.append(game)
+                            break
+                self.add_list(ListObj(self, name, games, i))
+                i += 1
+
     def remove_list(self, listobj):
         self.hide_lists()
+        if self.selection == listobj:
+            self.select(self.mainlist)
         self.lists.remove(listobj)
         self.show_lists()
         Thread(target=self.master.master.set_scroll).start()
@@ -317,6 +369,8 @@ class AddGame(Frame):
         super().__init__(master, cnf, **kw, height=300, width=200, bg="#292929")
         self.selected = False
         self.command = command
+        self.list = None
+        self.listbox = None
 
         self.Addimg = PhotoImage(file=r"Data/Graphics/Add Game Button.png")
         self.highlighted = PhotoImage(file=r"Data/Graphics/Add Game Button HL.png")
@@ -343,12 +397,26 @@ class AddGame(Frame):
         if self.selected:
             self.text["image"] = self.mostlighted
 
-    def on_release(self, _):
+    def on_release(self, event):
         if self.selected:
             self.text["image"] = self.highlighted
             if self.main:
                 Basic3EntryPopup(self, "Oyun ekle", "Oyun adı", "Oyun yolu", "Exe yolu", "Kaydet",
                                  self.save)
+            elif self.list is not None:
+                # Zaten olanları ekleme
+                self.listbox = self.list.master.master
+                menu = DropMenu(self)
+                selected = IntVar()
+                selected.set(-1)
+
+                for game in range(len(self.listbox.mainlist.games)):
+                    menu.add_radiobutton(label=self.listbox.mainlist.games[game].name, variable=selected, command=lambda: self.add_to_list(selected), value=game)
+
+                menu.show(event, 70)
+
+    def add_to_list(self, game):
+        self.master.master.add_game(self.listbox.mainlist.games[game.get()])
 
     def save(self, entrys):
         name = entrys.Entry1.get()
@@ -377,11 +445,12 @@ class GameSection(ScrollableFrame):
 
         self.frame.configure(bg="black")
 
-    def set_games(self, games: list, main: bool):
+    def set_games(self, thelist: ListObj, main: bool):
         self.widgets = []
-        for game in games:
+        for game in thelist.games:
             self.widgets.append(Gamebox(self.frame, game))
         self.add_button.main = main
+        self.add_button.list = thelist
         self.widgets.append(self.add_button)
 
     def show_games(self):
@@ -400,6 +469,7 @@ class GameSection(ScrollableFrame):
             widget.grid_forget()
 
     def add_game(self, game):
+        print(game.name, game.no)
         self.master.master.list_scroll.selection.add(game)
         self.master.master.list_scroll.select(self.master.master.list_scroll.selection)
 
@@ -506,12 +576,12 @@ def width_changer(root, widget, name="Nothing", x=0, y=0):
 
 def game_creator(count=None):
     gamelist = []
-    for a, b in [["Ark: Survival Evolved", "200GB"], ["Grand Thieves Auto V", "180GB"],
-                 ["Grand Thieves Auto IV", "80GB"], ["Paladins", "21GB"], ["Portal", "200MB"],
-                 ["Space Engineers", "24GB"], ["Empirion - Galactic Survival", "17GB"], ["Portal 2", "5GB"],
-                 ["Arma 2", "60GB"], ["Deceit", "20GB"], ["Company of Heroes 2", "24GB"],
-                 ["Bus Simulator 2018", "5GB"]]:
-        gamelist.append(Game(a, b))
+    for a, b, c in [["Ark: Survival Evolved", "200GB", 1], ["Grand Thieves Auto V", "180GB", 2],
+                 ["Grand Thieves Auto IV", "80GB", 3], ["Paladins", "21GB", 4], ["Portal", "200MB", 5],
+                 ["Space Engineers", "24GB", 6], ["Empirion - Galactic Survival", "17GB", 7], ["Portal 2", "5GB", 8],
+                 ["Arma 2", "60GB", 9], ["Deceit", "20GB", 10], ["Company of Heroes 2", "24GB", 11],
+                 ["Bus Simulator 2018", "5GB", 12]]:
+        gamelist.append(Game(a, b, c))
     if count is None:
         return gamelist
     return gamelist[:count]
@@ -525,7 +595,9 @@ def set_size(self, height, width):
 # Bütün eklemelerin vb. seçili olan öğeler için yapılmasını sağlayan fonksiyonlar ekle
 class MainInterface(Frame):
 
-    def __init__(self, master=None, addgamecom=None, cnf=None, **kw):
+    def __init__(self, master=None, library=None, addgamecom=None, cnf=None, **kw):
+        if library is None:
+            library = []
         if cnf is None:
             cnf = {}
         super().__init__(master, cnf, **kw, bg="black")
@@ -539,7 +611,7 @@ class MainInterface(Frame):
         self.sets = Frame(games_frame, bg="black")
 
         self.games_section = GameSection(games_frame, addgamecom)
-        self.list_scroll = Listbox(list_frame)
+        self.list_scroll = Listbox(list_frame, library)
         settim = Settings(self.sets)
 
         self.games_section.pack(side=LEFT, expand=True, fill=BOTH)
@@ -634,12 +706,12 @@ class MainInterface(Frame):
 
     def load_list(self, liste: ListObj):
         self.games_section.hide_games()
-        self.games_section.set_games(liste.games, not liste.menu)
+        self.games_section.set_games(liste, not liste.menu)
         self.games_section.show_games()
         Thread(target=self.set_scroll).start()
 
     def add_list(self, name):
-        self.list_scroll.lists.append(ListObj(self.list_scroll, name))
+        self.list_scroll.add_list(ListObj(self.list_scroll, text=name))
 
 
 if __name__ == '__main__':
@@ -649,9 +721,7 @@ if __name__ == '__main__':
 
     library = game_creator(3)
 
-    Mainwin = MainInterface(window)
-
-    Mainwin.list_scroll.add_list(ListObj(Mainwin.list_scroll, "Tümü", library, False), True)
+    Mainwin = MainInterface(window, library)
 
     Mainwin.pack(fill=BOTH, expand=True)
 

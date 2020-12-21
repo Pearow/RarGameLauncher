@@ -135,6 +135,8 @@ class Program:
             os.mkdir("library")
         self.stop = False
         self.library = []
+        self.window = None
+        self.interface = None
 
         self.game_scan()
 
@@ -211,12 +213,7 @@ class Program:
 
     def gui_start(self):
         self.window = Tk()
-        self.interface = MainInterface(self.window, self.add_game)
-
-        self.interface.list_scroll.add_list(ListObj(self.interface.list_scroll, "Tümü", self.library, False), True)
-
-        self.interface.list_scroll.lists += self.set_lists(self.interface.list_scroll)
-        self.interface.list_scroll.show_lists()
+        self.interface = MainInterface(self.window, self.library, self.add_game)
 
         self.interface.pack(fill="both", expand=True)
 
