@@ -26,6 +26,12 @@ class Game:
     def start(self):
         print(self.name, "başlatılıyor...")
 
+    def delete(self):
+        print("Game deleted")
+
+    def rename(self, name):
+        self.name = name
+
 
 class ScrollableFrame(Canvas):
 
@@ -68,6 +74,9 @@ class Gamebox(Frame):
         super().__init__(master, cnf, **kw, height=300, width=200, bg="#292929")
         self.game = game
         self.selected = False
+        self.renamemode = False
+        self.newname = ""
+        self.rightmenu = DropMenu(self)
 
         # Her gamebox class'ı için yeni bir resim objesi oluşturulmamalı
         self.lights = [PhotoImage(file=r"Data/Graphics/Işık2_YEŞİL10x10.png"),
@@ -86,6 +95,9 @@ class Gamebox(Frame):
                           font=("arial", 8), fg="#7d7d7d")
         self.info_light = Label(self, bg="#292929", image=self.lights[self.game.compressed])
         self.platform_img = Label(self, image=self.platforms[game.platform], borderwidth=0, bg="#292929")
+
+        self.rightmenu.add_command(label="Sil", command=self.remove)
+        self.rightmenu.add_command(label="Yeniden adlandır", command=self.rename)
 
         self.bind("<Enter>", self.on_enter)
         self.bind("<Leave>", self.on_leave)
@@ -108,6 +120,7 @@ class Gamebox(Frame):
         self.selected = True
         self.bind_all("<Button-1>", self.on_press)
         self.bind_all("<ButtonRelease-1>", self.on_release)
+        self.bind_all("<ButtonRelease-3>", self.on_rightclick)
 
         self["background"] = back_color
         self.Name["background"] = back_color
@@ -155,6 +168,40 @@ class Gamebox(Frame):
             # Bu threadı kullanarak oyunun açılıp açılmadığına bakılabilir
             daemon_and_start(self.game.start, "Game starter or decompressor")
 
+    def on_rightclick(self, event):
+        if self.selected:
+            self.rightmenu.show(event)
+
+    def rename(self):
+        self.Name["text"] = ""
+        self.renamemode = True
+        self.bind_all("<Key>", self.key_listen)
+
+    def key_listen(self, event):
+        if not self.renamemode:
+            return
+        if event.keysym == "BackSpace":
+            self.Name["text"] = self.Name["text"][:-1]
+
+        elif event.keysym == "Return":
+            self.unbind("<Key>")
+            self.game.rename(self.Name["text"])
+            self.renamemode = False
+            return
+
+        elif event.keysym == "Escape":
+            self.Name["text"] = self.game.name
+            self.renamemode = False
+            return
+
+        else:
+            self.Name["text"] += event.char
+
+    def remove(self):
+        self.pack_forget()
+        self.master.master.delete_game(self)
+        del self
+
 
 class ListObj(Frame):
 
@@ -188,6 +235,15 @@ class ListObj(Frame):
     def add(self, game):
         self.games.append(game)
         self.save()
+
+    def remove(self, game):
+        if not self.menu:
+            game.delete()
+        try:
+            self.games.remove(game)
+            self.save()
+        except ValueError:
+            print(f"{game.name} the game could not found")
 
     def on_enter(self, _):
         self.selected = True
@@ -308,6 +364,27 @@ class Listbox(ScrollableFrame):
         if select:
             self.select(liste)
 
+    def remove_list(self, listobj):
+        self.hide_lists()
+        if self.selection == listobj:
+            self.select(self.mainlist)
+        self.lists.remove(listobj)
+        self.show_lists()
+        Thread(target=self.master.master.set_scroll).start()
+
+    def add_game(self, game):
+        self.selection.add(game)
+        self.select(self.selection)
+
+    def remove_game(self, game):
+        if game in self.selection.games:
+            if self.selection == self.mainlist:
+                for thelist in self.lists:
+                    thelist.remove(game)
+            self.selection.remove(game)
+        else:
+            print(f"There is no game named {game.name} in the selected list")
+
     def scan_file(self):
         if not os.path.exists("Data/data.ls"):
             open("Data/data.ls", "w", encoding="utf-8")
@@ -330,14 +407,6 @@ class Listbox(ScrollableFrame):
                 self.add_list(ListObj(self, name, games, i))
                 i += 1
 
-    def remove_list(self, listobj):
-        self.hide_lists()
-        if self.selection == listobj:
-            self.select(self.mainlist)
-        self.lists.remove(listobj)
-        self.show_lists()
-        Thread(target=self.master.master.set_scroll).start()
-
     def show_lists(self):
         self.add_butt.pack_forget()
         for liste in self.lists:
@@ -356,9 +425,12 @@ class Listbox(ScrollableFrame):
             if widget == selection:
                 selection.text["bg"] = "#002600"
             else:
-                widget.text["bg"] = "#001c00"
+                widget.text["bg"] = "#001c00"# Neden böyle yapımışım hatırlamıyorum
 
         self.master.master.load_list(self.selection)
+
+    def refresh(self):
+        self.select(self.selection)
 
 
 class AddGame(Frame):
@@ -411,7 +483,8 @@ class AddGame(Frame):
                 selected.set(-1)
 
                 for game in range(len(self.listbox.mainlist.games)):
-                    menu.add_radiobutton(label=self.listbox.mainlist.games[game].name, variable=selected, command=lambda: self.add_to_list(selected), value=game)
+                    menu.add_radiobutton(label=self.listbox.mainlist.games[game].name,
+                                         variable=selected, command=lambda: self.add_to_list(selected), value=game)
 
                 menu.show(event, 70)
 
@@ -469,9 +542,13 @@ class GameSection(ScrollableFrame):
             widget.grid_forget()
 
     def add_game(self, game):
-        print(game.name, game.no)
-        self.master.master.list_scroll.selection.add(game)
-        self.master.master.list_scroll.select(self.master.master.list_scroll.selection)
+        self.master.master.list_scroll.add_game(game)
+
+    def delete_game(self, gamebox):
+        self.hide_games()
+        self.master.master.list_scroll.remove_game(gamebox.game)
+        self.show_games()
+        self.master.master.list_scroll.refresh()
 
 
 class Settings(Label):
@@ -577,10 +654,10 @@ def width_changer(root, widget, name="Nothing", x=0, y=0):
 def game_creator(count=None):
     gamelist = []
     for a, b, c in [["Ark: Survival Evolved", "200GB", 1], ["Grand Thieves Auto V", "180GB", 2],
-                 ["Grand Thieves Auto IV", "80GB", 3], ["Paladins", "21GB", 4], ["Portal", "200MB", 5],
-                 ["Space Engineers", "24GB", 6], ["Empirion - Galactic Survival", "17GB", 7], ["Portal 2", "5GB", 8],
-                 ["Arma 2", "60GB", 9], ["Deceit", "20GB", 10], ["Company of Heroes 2", "24GB", 11],
-                 ["Bus Simulator 2018", "5GB", 12]]:
+                    ["Grand Thieves Auto IV", "80GB", 3], ["Paladins", "21GB", 4], ["Portal", "200MB", 5],
+                    ["Space Engineers", "24GB", 6], ["Empirion - Galactic Survival", "17GB", 7], ["Portal 2", "5GB", 8],
+                    ["Arma 2", "60GB", 9], ["Deceit", "20GB", 10], ["Company of Heroes 2", "24GB", 11],
+                    ["Bus Simulator 2018", "5GB", 12]]:
         gamelist.append(Game(a, b, c))
     if count is None:
         return gamelist
@@ -719,9 +796,9 @@ if __name__ == '__main__':
     window = Tk()
     window.configure(bg="black")
 
-    library = game_creator(3)
+    created = game_creator(3)
 
-    Mainwin = MainInterface(window, library)
+    Mainwin = MainInterface(window, created)
 
     Mainwin.pack(fill=BOTH, expand=True)
 

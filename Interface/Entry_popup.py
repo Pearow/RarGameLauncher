@@ -1,6 +1,7 @@
 from tkinter import *
 from Interface.main import width_changer
 
+
 class SpecEntry(Canvas):
 
     def __init__(self, master=None, cnf=None, **kw):
@@ -37,7 +38,8 @@ class ListPopup(Toplevel):
     def on_move(self, event):
         print(event.height, event.width)
 
-class Entry_win(Toplevel):
+
+class EntryWin(Toplevel):
     def __init__(self, master=None, cnf=None, **kw):
         if cnf is None:
             cnf = {}

@@ -103,6 +103,10 @@ class Game:
         os.chdir(old_path)
         self.save()
 
+    def rename(self, name):
+        self.name = name
+        self.save()
+
     def checkexp(self):
         if not self.compressed and self.expdate < datetime.datetime.now():
             self.compress()
