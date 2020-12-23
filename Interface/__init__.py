@@ -17,6 +17,7 @@ class Game:
         self.no = no
         self.expdate = date
         self.compressed = False
+        self.light_command = None
         if image_path is not None:
             self.image = PhotoImage(file=image_path)
         else:
@@ -24,6 +25,8 @@ class Game:
         self.platform = 0
 
     def start(self):
+        if self.compressed:
+            self.decompress()
         print(self.name, "başlatılıyor...")
 
     def delete(self):
@@ -31,6 +34,48 @@ class Game:
 
     def rename(self, name):
         self.name = name
+
+    def compress(self):
+        print(self.name, "is compressing...")
+        if self.light_command is not None:
+            self.light_command("Compressing")
+        time.sleep(5)
+        self.compressed = True
+        if self.light_command is not None:
+            self.light_command("Compressed")
+
+        print(self.name, "is compressed")
+
+    def decompress(self):
+        print(self.name, "is decompressing...")
+        if self.light_command is not None:
+            self.light_command("Decompressing")
+        time.sleep(5)
+        self.compressed = False
+        if self.light_command is not None:
+            self.light_command("Decompressed")
+
+        print(self.name, "is decompressed")
+
+
+def gif_runner(self, label: Label, gif: str, frame_rate: int):
+    gif_list = []
+    i = 0
+    if not os.path.exists(gif):
+        print("File not exists")
+        return
+    while True:
+        try:
+            photo = PhotoImage(file=gif, format=f"gif -index {i}")
+            gif_list.append(photo)
+            i += 1
+        except _tkinter.TclError as error:
+            print(f'HATA: "{error}" dolayı GIF yürütülemedi')
+            break
+    while not self.gifstop:
+        for frame in gif_list:
+            label["image"] = frame
+            time.sleep(1 / frame_rate)
 
 
 class ScrollableFrame(Canvas):
@@ -75,12 +120,14 @@ class Gamebox(Frame):
         self.game = game
         self.selected = False
         self.renamemode = False
-        self.newname = ""
+        self.gifstop = False
         self.rightmenu = DropMenu(self)
+        self.game.light_command = self.change_light
 
         # Her gamebox class'ı için yeni bir resim objesi oluşturulmamalı
         self.lights = [PhotoImage(file=r"Data/Graphics/Işık2_YEŞİL10x10.png"),
-                       PhotoImage(file=r"Data/Graphics/Işık_AÇIKYEŞİL10x10.png")]
+                       PhotoImage(file=r"Data/Graphics/Işık_AÇIKYEŞİL10x10.png"),
+                       PhotoImage(file=r"Data/Graphics/LoopBLUE.png"), PhotoImage(file=r"Data/Graphics/LoopGREEN.png")]
         self.platforms = [PhotoImage(file=r"Data/Graphics/steamicon.png")]
         self.gameimage = PhotoImage(file=game.image)
 
@@ -94,10 +141,14 @@ class Gamebox(Frame):
         self.date = Label(date_frame, text=game.expdate.strftime("%d.%m.%Y"), bg="#292929", height=1, width=10,
                           font=("arial", 8), fg="#7d7d7d")
         self.info_light = Label(self, bg="#292929", image=self.lights[self.game.compressed])
-        self.platform_img = Label(self, image=self.platforms[game.platform], borderwidth=0, bg="#292929")
+        if self.game.platform is not None:
+            self.platform_img = Label(self, image=self.platforms[game.platform], borderwidth=0, bg="#292929")
+        else:
+            self.platform_img = Label(self)
 
-        self.rightmenu.add_command(label="Sil", command=self.remove)
+        self.rightmenu.add_command(label="Sil", command=lambda: daemon_and_start(self.remove, "Remove Function"))
         self.rightmenu.add_command(label="Yeniden adlandır", command=self.rename)
+        self.rightmenu.add_command(labe="Sıkıştır", command=lambda: daemon_and_start(self.game.compress, "Compressor"))
 
         self.bind("<Enter>", self.on_enter)
         self.bind("<Leave>", self.on_leave)
@@ -112,7 +163,8 @@ class Gamebox(Frame):
         self.date.pack(side=LEFT)
 
         self.info_light.place(x=185, y=2)
-        self.platform_img.place(x=178, y=278)
+        if self.game.platform is not None:
+            self.platform_img.place(x=178, y=278)
 
     def on_enter(self, _):
         back_color = "#323232"
@@ -167,6 +219,7 @@ class Gamebox(Frame):
 
             # Bu threadı kullanarak oyunun açılıp açılmadığına bakılabilir
             daemon_and_start(self.game.start, "Game starter or decompressor")
+            self.refresh()
 
     def on_rightclick(self, event):
         if self.selected:
@@ -201,6 +254,27 @@ class Gamebox(Frame):
         self.pack_forget()
         self.master.master.delete_game(self)
         del self
+
+    def refresh(self):
+        self.image["image"] = self.gameimage
+        self.Name["text"] = self.game.name
+        self.size["text"] = f"Boyut: {self.game.size}"
+        self.date["text"] = self.game.expdate.strftime("%d.%m.%Y")
+        if self.game.platform is not None:
+            self.platform_img["image"] = self.platforms[self.game.platform]
+
+    def change_light(self, compress):
+        if compress == "Compressing":
+            self.info_light["image"] = self.lights[2]
+
+        elif compress == "Decompressing":
+            self.info_light["image"] = self.lights[3]
+
+        elif compress == "Compressed":
+            self.info_light["image"] = self.lights[1]
+
+        elif compress == "Decompressed":
+            self.info_light["image"] = self.lights[0]
 
 
 class ListObj(Frame):
@@ -237,13 +311,15 @@ class ListObj(Frame):
         self.save()
 
     def remove(self, game):
-        if not self.menu:
-            game.delete()
         try:
             self.games.remove(game)
-            self.save()
+            if self.menu:
+                self.save()
         except ValueError:
             print(f"{game.name} the game could not found")
+        self.master.master.refresh()
+        if not self.menu:
+            game.delete()
 
     def on_enter(self, _):
         self.selected = True
@@ -425,7 +501,7 @@ class Listbox(ScrollableFrame):
             if widget == selection:
                 selection.text["bg"] = "#002600"
             else:
-                widget.text["bg"] = "#001c00"# Neden böyle yapımışım hatırlamıyorum
+                widget.text["bg"] = "#001c00"  # Neden böyle yapımışım hatırlamıyorum
 
         self.master.master.load_list(self.selection)
 
@@ -586,26 +662,6 @@ class Settings(Label):
         if self.selected:
             print("Settings opening...")
             self.configure(image=self.highlighted)
-
-
-def gif_runner(self, label: Label, gif: str, frame_rate: int):
-    gif_list = []
-    i = 0
-    if not os.path.exists(gif):
-        print("File not exists")
-        return
-    while True:
-        try:
-            photo = PhotoImage(file=gif, format=f"gif -index {i}")
-            gif_list.append(photo)
-            i += 1
-        except _tkinter.TclError as error:
-            print(f'HATA: "{error}" dolayı GIF yürütülemedi')
-            break
-    while not self.stop:
-        for frame in gif_list:
-            label["image"] = frame
-            time.sleep(1 / frame_rate)
 
 
 def change(dic, obj):
@@ -795,6 +851,7 @@ if __name__ == '__main__':
     os.chdir("..")
     window = Tk()
     window.configure(bg="black")
+    window.title("RarGame Launcher -GUI DEBUG-")
 
     created = game_creator(3)
 

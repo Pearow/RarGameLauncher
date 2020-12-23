@@ -13,7 +13,7 @@ from tkinter import Tk, PhotoImage
 # çakışır
 rarday = 1
 scanrate = 600
-breaktime = 30
+breaktime = 60
 Version = "pre_alpha 0.0.1"
 
 
@@ -22,7 +22,8 @@ def create_endday(day):
 
 
 class Game:
-    def __init__(self, fullpath: str, exefile: str, expdate: str, size: int, no: int, name=None, image: str = None, platform=None):
+    def __init__(self, fullpath: str, exefile: str, expdate: str, size: int, no: int, name=None, image: str = None,
+                 platform: str = None):
         self.fullpath = fullpath
         self.exefile = exefile
         self.no = no
@@ -31,8 +32,8 @@ class Game:
         expdate = expdate.split(".")
         self.expdate = datetime.datetime(day=int(expdate[0]), month=int(expdate[1]), year=int(expdate[2]))
         self.file = f"library/{self.no}.gm"
-        self.platform = 0  # Tabii ki de 0 olmayacak
         self.bytes = size
+        self.light_command = None
 
         if name is None or name == "" or name == " ":
             name = exefile.split(os.path.sep)[-1]
@@ -42,6 +43,11 @@ class Game:
             self.image = r"Data/Graphics/No İmage Found.png"
         else:
             self.image = image
+
+        if platform is not None:
+            self.platform = platform
+        else:
+            self.platform = None
 
         if size >= 1024 * 1024 * 1024:
             self.size = size / (1024 * 1024 * 1024)
@@ -64,21 +70,29 @@ class Game:
             self.size = str(size // 1024) + "KB"
 
     def compress(self):
-        if __name__ == '__main__':
+        if __name__ == '__main__':  # Gereksizse kaldır
             if not self.compressed:
                 print(self.name, "is compressing")
+                if self.light_command is not None:
+                    self.light_command("Compressing")
                 self.compressor.compress()
                 self.fullpath = self.compressor.name
                 self.compressed = True
+                if self.light_command is not None:
+                    self.light_command("Compressed")
                 self.save()
                 print(f"{self.name}'s compression completed")
 
     def decompress(self):
         if self.compressed:
             print(self.name, "is decompressing")
+            if self.light_command is not None:
+                self.light_command("Decompressing")
             self.compressor.decompress()
             self.fullpath = self.compressor.name
             self.compressed = False
+            if self.light_command is not None:
+                self.light_command("Decompressed")
             self.save()
             print(f"{self.name}'s decompression completed")
 
@@ -89,6 +103,8 @@ class Game:
                 f"\nexpdate: {self.expdate.strftime('%d.%m.%Y')}\nsize: {self.bytes}")
 
     def delete(self):
+        if self.compressed:
+            self.decompress()
         if os.path.exists(self.file):
             os.remove(self.file)
 
@@ -201,6 +217,8 @@ class Program:
             print(40 * "_")
 
     def exp_scanner(self):
+        # Cool down
+        time.sleep(10)# Sonrasında daha uzun bir süre olacak
         while not self.stop:
             for game in self.library:
                 if game.checkexp():
@@ -217,11 +235,13 @@ class Program:
 
     def gui_start(self):
         self.window = Tk()
+        self.window.title("RarGame Launcher")
         self.interface = MainInterface(self.window, self.library, self.add_game)
 
         self.interface.pack(fill="both", expand=True)
 
         self.window.mainloop()
+        self.stop = True
 
     def set_lists(self, master):
         if not os.path.exists("Data/data.ls"):
@@ -243,15 +263,9 @@ class Program:
 
     def start(self):
         daemon_and_start(self.exp_scanner, "Date scanner")
+        self.gui_start()
 
 
 if __name__ == '__main__':
     Pro = Program()
-    # Pro.start()
-    Pro.gui_start()
-    # Pro.add_game(r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\Factorio.v0.18.34",
-    # r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\Factorio.v0.18.34\bin\x64\factorio.exe")
-    # Pro.add_game(r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\Noita.v15.07.2020",
-    #              r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\Noita.v15.07.2020\noita.exe")
-    # Pro.add_game(r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\Stormworks",
-    #              r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\Stormworks\stormworks.exe")
+    Pro.start()

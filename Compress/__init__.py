@@ -298,6 +298,7 @@ class Directory:
 
 def safe_delete(path, count=0):
     if count >= 5:
+        print(f"Deleting {path} is failed")
         return False
     try:
         os.remove(path)
