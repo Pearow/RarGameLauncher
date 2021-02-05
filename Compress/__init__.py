@@ -11,17 +11,21 @@ import time
 
 
 class File:
-    def __init__(self, name: str, num: int):
+    def __init__(self, name: str, num: int, compressed: bool = None):
         self.name = name
         self.extension = name.split(".")[-1]
         self.num = num
         self.size = 0
         self.loc = (0, 0)
+        self.compressed = compressed
         if self.extension == "pcf":
             self.compressed = 1
-        else:
+            self.banner = 0  # Hataların anlaşılmasını zorlaştırabilir
+        elif self.compressed is None:
             self.compressed = 0
-        self.banner = 0  # Hataların anlaşılmasını zorlaştırabilir
+
+        if not self.compressed:
+            self.size = os.path.getsize(self.name)
 
     def compress(self, rgl_file="RGL_compressed"):
         if self.compressed:
@@ -31,6 +35,7 @@ class File:
             os.mkdir(rgl_file)
         except FileExistsError:
             pass
+        self.size = 0
         with open(rgl_file + os.path.sep + str(self.num) + ".pcf", "wb") as cmpresed:
             with open(self.name, "rb") as file:
                 data = file.read()
@@ -39,14 +44,16 @@ class File:
                     self.size += len(compdata)
                     cmpresed.write(b"\n*****\n" + str.encode(self.name) + b"///" + str.encode(str(self.size)) +
                                    b"*****\n" + compdata)
-                    # os.remove(self.name)
+                    self.banner = len(b"\n*****\n" + str.encode(self.name) + b"///" + str.encode(str(self.size)))
+                    # os.remove(self.name)  # dosya dosya rarlarken işeyarayabilir ama seçilebilir olmalı
 
     def decompress(self):
         if not self.compressed:
             raise TypeError("Can't decompress a non-compressed file")
         with open(self.name, "rb") as compfile:
             old_name = self.name
-            self.extract(compfile.read(300))
+            self.extract(compfile.read(300))  # Yavaşlatıyor ve bannerı bulmaya yarıyor(Malsın amk hiç bir yerde kullanılmamış)
+            # __init__e al
             compfile.seek(self.banner)
             with open(self.name, "wb") as file:
                 file.write(gzip.decompress(compfile.read(self.size)))
@@ -62,20 +69,22 @@ class File:
                     tag = tag[:i].decode("utf-8", "replace").split("///")
                     break
                 i += 1
-            if type(tag) == list:
+            if type(tag) == list and len(tag) == 2:
                 self.name = tag[0]
                 self.size = int(tag[1])
             else:
-                print(self.name, "Dosyasında hata var")
+                print(tag, "there is an error in this file")
 
 
 class Directory:
     thread_count = 50
 
-    def __init__(self, name: str):  # Dosyanın olup olmamasıyla ilgili bir şey ekle
+    # Sıkıştırılırken ve sıkıştırma açılırken oluşturulması gereken klasörler ayrı ayrı listelensin
+    def __init__(self, name: str):
         self.name = name
         self.rgl_file = "RGL_compressed"
         self.contents = []
+        self.ready = False
         if name.split(".")[-1] == "pcf":
             self.compression = 1
         else:
@@ -86,24 +95,43 @@ class Directory:
         else:
             self.purename = self.name
 
+        if not os.path.exists(self.name):
+            if self.compression:
+                if os.path.exists(self.purename):
+                    self.name = self.purename
+                    self.compression = 0
+                    print("Compression was false and changed")
+                else:
+                    print("There is no file named", self.name)
+                    raise FileNotFoundError
+            else:
+                if os.path.exists(self.name + ".pcf"):
+                    self.name += ".pcf"
+                    self.compression = 1
+                    print("Compression was false and changed")
+                else:
+                    print("There is no file named", self.name)
+                    raise FileNotFoundError
+
         self.stop = False
         self.working = False
-        self.scan()
+        daemon_and_start(self.scan, "Scanner")
 
     def scan(self):
         no = 0
+        self.ready = False
         print(self.name, "scaning")
         if not self.compression:
             for before, dirs, files in os.walk(self.name):
                 for file in files:
-                    self.contents.append(File(f"{before}{os.path.sep}{file}", no))
+                    self.contents.append(File(f"{before}{os.path.sep}{file}", no, False))
                     no += 1
         elif self.compression:
             a = 0
             with open(self.name, "rb") as mainfile:
                 data = mainfile.read(300)
                 while data != b"":
-                    file = File(".pcf", no)
+                    file = File(str(no), no, True)
                     file.extract(data)
                     size = file.size
                     file.loc = (a + file.banner, file.size)
@@ -112,6 +140,8 @@ class Directory:
                     mainfile.seek(a)
                     data = mainfile.read(300)
                     no += 1
+        print(f"Scanning of {self.name} completed. {len(self.contents)} file exist.")
+        self.ready = True
 
     def list(self):
         for file in self.contents:
@@ -120,6 +150,11 @@ class Directory:
     def compress(self):
         if self.compression:
             raise TypeError("Can't compress a compressed directory")
+        while not self.ready:
+            if self.stop:
+                return
+            time.sleep(0.1)
+
         processes = []
         queue = Queue()
         self.working = "Compressing"
@@ -162,12 +197,13 @@ class Directory:
                         print(len(processes))
                         time.sleep(0.1)
                 print(
-                    f"Kapatılma bitti. {c} işlem arasından {i} tane işlem iptal edildi. Bu işlem {time.time() - b} saniye sürdü")
+                    f"Kapatılma bitti. {c} işlem arasından {i} tane işlem iptal edildi. Bu işlem {time.time() - b}"
+                    f" saniye sürdü")
 
         print(time.time() - ti)
         self.working = False
         if old_size > 0 and not self.stop:
-            self.compile_Compressed()
+            self.compile_compressed()
             print("Sıkıştırma tamamlandı")
         elif self.stop:
             self.stop = False
@@ -176,11 +212,14 @@ class Directory:
         else:
             print("Sıkıştırılacak dosya bulunamadı")
 
-    def compile_Compressed(self):
+    def compile_compressed(self):
         with open(self.name + ".pcf", "wb") as compfile:
             print("Compiling files")
             for file in os.listdir(self.rgl_file):
-                compfile.write(open(f"{self.rgl_file}{os.path.sep}{file}", "rb").read())
+                if file.endswith(".pcf"):
+                    compfile.write(open(f"{self.rgl_file}{os.path.sep}{file}", "rb").read())
+                else:
+                    print(f"File named {file} is not ends with .pcf, your file had been deleted")
                 safe_delete(f"{self.rgl_file}{os.path.sep}{file}")
 
         self.compression = 1
@@ -206,17 +245,20 @@ class Directory:
 
         path = file.name[:-len(file.name.split(os.path.sep)[-1])]
         pathi = self.name[:-4]
-        for dir in path.split(os.path.sep)[len(self.name.split(os.path.sep)):]:
-            try:
+        for directory in path.split(os.path.sep)[len(self.name.split(os.path.sep)):]:
+            if not os.path.exists(pathi):
                 os.mkdir(pathi)
-            except FileExistsError:
-                pass
-            pathi += os.path.sep + dir
+            pathi += os.path.sep + directory
         open(file.name, "wb").write(data)
 
     def decompress(self):
         if not self.compression:
             raise TypeError("Can't compress a non-compressed directory")
+        while not self.ready:
+            if self.stop:
+                return
+            time.sleep(0.1)
+
         processes = []
         queue = Queue()
         print(self.name, "ayrıştırması başlatılıyor")
@@ -255,8 +297,8 @@ class Directory:
                                 processes.remove(pro)
                         print(len(processes))
                         time.sleep(0.1)
-                print(
-                    f"Kapatılma bitti. {c} işlem arasından {i} tane işlem iptal edildi. Bu işlem {time.time() - b} saniye sürdü")
+                print(f"Kapatılma bitti. {c} işlem arasından {i} tane işlem iptal edildi. Bu işlem"
+                      f" {round(time.time() - b)} saniye sürdü")
 
             time.sleep(1)
 
@@ -312,11 +354,11 @@ def safe_delete(path, count=0):
 
 
 if __name__ == '__main__':
-    debug = Directory(r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\MountBlade Warband.pcf")
+    debug = Directory(r"D:\TEST\BUFFER1\BUFFER2\BUFFER3\Democracy 4")
 
 
     def cancel():
-        if debug.working != False:
+        if debug.working is not False:
             debug.stop = True
             print("Kapatılma başlıyor")
         else:
@@ -330,7 +372,7 @@ if __name__ == '__main__':
     tk.Button(text="Decompress", command=lambda: daemon_and_start(debug.decompress, "decompress")).pack()
     tk.Button(text="List", command=debug.list).pack()
     tk.Button(text="Terminate process", command=cancel).pack()
-    tk.Button(text="compile", command=lambda: daemon_and_start(debug.compile_Compressed, "compile")).pack()
+    tk.Button(text="compile", command=lambda: daemon_and_start(debug.compile_compressed, "compile")).pack()
     tk.Button(text="exit", command=sys.exit).pack()
 
     window.mainloop()

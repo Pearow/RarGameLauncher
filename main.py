@@ -11,10 +11,10 @@ from tkinter import Tk, PhotoImage
 # If os.exists kullanarak oyun dosyalarının olup olmadığını kontrol et ona göre oyunun oynanabilir olup olmadığını
 # göstersin BUG!! bir oyun sıkıştırılırken aynı anda başka bir sıkıştırılmış oyun çalıştırılmaya çalışılırsa dosyalar
 # çakışır
-rarday = 1
+rarday = 10
 scanrate = 600
 breaktime = 60
-Version = "pre_alpha 0.0.1"
+Version = "pre_alpha 0.1"
 
 
 def create_endday(day):
@@ -33,6 +33,7 @@ class Game:
         self.expdate = datetime.datetime(day=int(expdate[0]), month=int(expdate[1]), year=int(expdate[2]))
         self.file = f"library/{self.no}.gm"
         self.bytes = size
+        self.platform = platform
         self.light_command = None
 
         if name is None or name == "" or name == " ":
@@ -43,11 +44,6 @@ class Game:
             self.image = r"Data/Graphics/No İmage Found.png"
         else:
             self.image = image
-
-        if platform is not None:
-            self.platform = platform
-        else:
-            self.platform = None
 
         if size >= 1024 * 1024 * 1024:
             self.size = size / (1024 * 1024 * 1024)
@@ -218,7 +214,7 @@ class Program:
 
     def exp_scanner(self):
         # Cool down
-        time.sleep(10)# Sonrasında daha uzun bir süre olacak
+        time.sleep(60)# Sonrasında daha uzun bir süre olacak
         while not self.stop:
             for game in self.library:
                 if game.checkexp():

@@ -126,7 +126,7 @@ class Gamebox(Frame):
 
         # Her gamebox class'ı için yeni bir resim objesi oluşturulmamalı
         self.lights = [PhotoImage(file=r"Data/Graphics/Işık2_YEŞİL10x10.png"),
-                       PhotoImage(file=r"Data/Graphics/Işık_AÇIKYEŞİL10x10.png"),
+                       PhotoImage(file=r"Data/Graphics/Işık_AÇIKMAVİ10x10.png"),
                        PhotoImage(file=r"Data/Graphics/LoopBLUE.png"), PhotoImage(file=r"Data/Graphics/LoopGREEN.png")]
         self.platforms = [PhotoImage(file=r"Data/Graphics/steamicon.png")]
         self.gameimage = PhotoImage(file=game.image)
@@ -396,7 +396,7 @@ class ListObj(Frame):
     def delete(self):
         data = open("Data/data.ls", "r").read().splitlines()
         with open("Data/data.ls", "w", encoding="utf-8") as file:
-            print(data, self.row)
+            print(data, self.row) # debug print
             del data[self.row]
             if len(data) > 0:
                 file.write("\n".join(data) + "\n")
@@ -815,8 +815,6 @@ class MainInterface(Frame):
 
             set_size(self.games_section, height_diffrence, width_difference)
             set_size(self.list_scroll, height_diffrence, 0)
-        else:
-            print(self.unpackact)
 
         # Show game kısmı
         show_game = (int(self.games_section["width"]) - 100) // 200
