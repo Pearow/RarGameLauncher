@@ -16,6 +16,6 @@ if __name__ == '__main__':
 
     men = DropMenu(window)
     window.bind("<ButtonRelease-3>", men.show)
-    men.add_command(label="Mirhan bir mal", command=lambda: print("Aynen knk"))
+    men.add_command(label="Deneme", command=lambda: print("Deneme 2"))
 
     window.mainloop()
